@@ -1,0 +1,144 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String           @id @default(uuid())
+  googleId        String?          @unique
+  email           String           @unique
+  name            String
+  avatarUrl       String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  campaigns       Campaign[]
+  emailMessages   EmailMessage[]
+  slackConnection SlackConnection?
+
+  @@map("users")
+}
+
+model EmailSender {
+  id                     String         @id @default(uuid())
+  userId                 String?
+  email                  String
+  displayName            String?
+  smtpHost               String
+  smtpPort               Int
+  smtpSecure             Boolean        @default(false)
+  smtpUsernameEncrypted  String
+  smtpPasswordEncrypted  String
+  active                 Boolean        @default(true)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  emailMessages          EmailMessage[]
+
+  @@map("email_senders")
+}
+
+model Campaign {
+  id            String         @id @default(uuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject       String
+  body          String
+  startAt       DateTime
+  delayMs       Int
+  hourlyLimit   Int
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  emailMessages EmailMessage[]
+
+  @@index([userId, createdAt])
+  @@map("campaigns")
+}
+
+model EmailMessage {
+  id                     String       @id @default(uuid())
+  campaignId             String
+  campaign               Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId                 String
+  user                   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  senderId               String
+  sender                 EmailSender  @relation(fields: [senderId], references: [id])
+  recipient              String
+  subject                String
+  body                   String
+  sequenceNumber         Int
+  scheduledAt            DateTime
+  status                 String       @default("scheduled")
+  sentAt                 DateTime?
+  failedAt               DateTime?
+  failureReason          String?
+  attemptCount           Int          @default(0)
+  processingStartedAt    DateTime?
+  processingLeaseUntil   DateTime?
+  deterministicMessageId String       @unique
+  queueJobId             String       @unique
+  previewUrl             String?
+  indexedAt              DateTime?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, scheduledAt])
+  @@index([userId, sentAt])
+  @@index([senderId, scheduledAt])
+  @@index([campaignId, sequenceNumber])
+  @@index([recipient])
+  @@map("email_messages")
+}
+
+model SlackConnection {
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId               String
+  teamName             String
+  channelId            String
+  channelName          String
+  webhookUrlEncrypted  String
+  accessTokenEncrypted String?
+  connectedAt          DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("slack_connections")
+}
+
+model Session {
+  sid    String   @id
+  sess   Json
+  expire DateTime
+
+  @@index([expire])
+  @@map("session")
+}
+
+model RateLimitEvent {
+  id            String   @id @default(uuid())
+  senderId      String
+  hourWindow    String
+  limit         Int
+  count         Int
+  notifiedSlack Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([senderId, hourWindow])
+  @@map("rate_limit_events")
+}
+
+model IdempotencyKey {
+  key       String   @id
+  userId    String
+  response  Json
+  createdAt DateTime @default(now())
+
+  @@map("idempotency_keys")
+}
