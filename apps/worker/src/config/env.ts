@@ -9,11 +9,15 @@ const EnvSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+  PORT: z.coerce.number().default(3001),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
   ELASTICSEARCH_NODE: z.string().default("http://127.0.0.1:9200"),
   ELASTICSEARCH_USERNAME: z.string().optional(),
   ELASTICSEARCH_PASSWORD: z.string().optional(),
+
+  // Internal service binding for api (injected by Vercel when worker communicates with api)
+  API_URL: z.string().url().optional(),
 
   APP_ENCRYPTION_KEY: z
     .string()

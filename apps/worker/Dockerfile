@@ -31,9 +31,10 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl libc6-compat bash
+RUN apk add --no-cache openssl libc6-compat curl bash
 
 ENV NODE_ENV=production
+ENV PORT=3001
 
 # Copy node_modules and built artifacts from builder
 COPY --from=builder /app/node_modules ./node_modules
@@ -42,5 +43,11 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/packages/shared ./packages/shared
 COPY --from=builder /app/apps/worker ./apps/worker
 
-# Start BullMQ worker service
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-3001}/health || exit 1
+
+# Start BullMQ worker service with internal health server
 CMD ["node", "apps/worker/dist/worker.js"]

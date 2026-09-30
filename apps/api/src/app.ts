@@ -94,6 +94,7 @@ export function createApp() {
     let dbOk = false;
     let redisOk = false;
     let esOk = false;
+    let workerOk: boolean | null = null;
 
     try {
       await prisma.$queryRaw`SELECT 1`;
@@ -115,12 +116,26 @@ export function createApp() {
       esOk = false;
     }
 
-    const allReady = dbOk && redisOk;
+    // If WORKER_URL is injected via Vercel service binding, verify worker service is reachable
+    if (env.WORKER_URL) {
+      try {
+        const workerTarget = new URL("/health", env.WORKER_URL);
+        const workerRes = await fetch(workerTarget.toString(), {
+          signal: AbortSignal.timeout(3000),
+        });
+        workerOk = workerRes.ok;
+      } catch (err: any) {
+        workerOk = false;
+      }
+    }
+
+    const allReady = dbOk && redisOk && (workerOk === null || workerOk);
     res.status(allReady ? 200 : 503).json({
       status: allReady ? "ready" : "unhealthy",
       database: dbOk,
       redis: redisOk,
       elasticsearch: esOk,
+      ...(workerOk !== null ? { worker: workerOk } : {}),
       timestamp: new Date().toISOString(),
     });
   });

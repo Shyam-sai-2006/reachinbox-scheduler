@@ -21,7 +21,14 @@ const EnvSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   PORT: z.coerce.number().default(4000),
-  FRONTEND_URL: z.string().url().default("http://localhost:5173"),
+  FRONTEND_URL: z
+    .string()
+    .url()
+    .default(
+      process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:5173",
+    ),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
@@ -29,17 +36,28 @@ const EnvSchema = z.object({
   ELASTICSEARCH_USERNAME: z.string().optional(),
   ELASTICSEARCH_PASSWORD: z.string().optional(),
 
+  // Internal service binding for worker (injected by Vercel when services communicate)
+  WORKER_URL: z.string().url().optional(),
+
   GOOGLE_CLIENT_ID: z.string().default(""),
   GOOGLE_CLIENT_SECRET: z.string().default(""),
   GOOGLE_CALLBACK_URL: z
     .string()
-    .default("http://localhost:4000/api/auth/google/callback"),
+    .default(
+      process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}/api/auth/google/callback`
+        : "http://localhost:4000/api/auth/google/callback",
+    ),
 
   SLACK_CLIENT_ID: z.string().default(""),
   SLACK_CLIENT_SECRET: z.string().default(""),
   SLACK_REDIRECT_URI: z
     .string()
-    .default("http://localhost:4000/api/slack/callback"),
+    .default(
+      process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}/api/slack/callback`
+        : "http://localhost:4000/api/slack/callback",
+    ),
 
   SESSION_SECRET: z
     .string()
