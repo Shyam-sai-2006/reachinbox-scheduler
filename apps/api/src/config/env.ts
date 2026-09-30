@@ -24,25 +24,31 @@ const EnvSchema = z.object({
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  REDIS_URL: z.string().min(1, "REDIS_URL is required"),
-  ELASTICSEARCH_NODE: z.string().url().default("http://localhost:9200"),
+  REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
+  ELASTICSEARCH_NODE: z.string().default("http://127.0.0.1:9200"),
   ELASTICSEARCH_USERNAME: z.string().optional(),
   ELASTICSEARCH_PASSWORD: z.string().optional(),
 
-  GOOGLE_CLIENT_ID: z.string().min(1, "GOOGLE_CLIENT_ID is required"),
-  GOOGLE_CLIENT_SECRET: z.string().min(1, "GOOGLE_CLIENT_SECRET is required"),
-  GOOGLE_CALLBACK_URL: z.string().url(),
+  GOOGLE_CLIENT_ID: z.string().default(""),
+  GOOGLE_CLIENT_SECRET: z.string().default(""),
+  GOOGLE_CALLBACK_URL: z
+    .string()
+    .default("http://localhost:4000/api/auth/google/callback"),
 
-  SLACK_CLIENT_ID: z.string().min(1, "SLACK_CLIENT_ID is required"),
-  SLACK_CLIENT_SECRET: z.string().min(1, "SLACK_CLIENT_SECRET is required"),
-  SLACK_REDIRECT_URI: z.string().url(),
+  SLACK_CLIENT_ID: z.string().default(""),
+  SLACK_CLIENT_SECRET: z.string().default(""),
+  SLACK_REDIRECT_URI: z
+    .string()
+    .default("http://localhost:4000/api/slack/callback"),
 
   SESSION_SECRET: z
     .string()
-    .min(16, "SESSION_SECRET must be at least 16 characters"),
+    .min(16, "SESSION_SECRET must be at least 16 characters")
+    .default("reachinbox-production-session-secret-key-32chars"),
   APP_ENCRYPTION_KEY: z
     .string()
-    .min(32, "APP_ENCRYPTION_KEY must be at least 32 characters"),
+    .min(32, "APP_ENCRYPTION_KEY must be at least 32 characters")
+    .default("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 
   ETHEREAL_SENDERS_JSON: z.string().default("[]"),
 

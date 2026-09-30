@@ -10,14 +10,15 @@ const EnvSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  REDIS_URL: z.string().min(1, "REDIS_URL is required"),
-  ELASTICSEARCH_NODE: z.string().url().default("http://localhost:9200"),
+  REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
+  ELASTICSEARCH_NODE: z.string().default("http://127.0.0.1:9200"),
   ELASTICSEARCH_USERNAME: z.string().optional(),
   ELASTICSEARCH_PASSWORD: z.string().optional(),
 
   APP_ENCRYPTION_KEY: z
     .string()
-    .min(32, "APP_ENCRYPTION_KEY must be at least 32 characters"),
+    .min(32, "APP_ENCRYPTION_KEY must be at least 32 characters")
+    .default("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
   ETHEREAL_SENDERS_JSON: z.string().default("[]"),
 
   WORKER_CONCURRENCY: z.coerce.number().int().positive().default(10),

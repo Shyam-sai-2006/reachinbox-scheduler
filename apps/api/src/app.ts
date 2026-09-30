@@ -4,6 +4,8 @@ import connectPgSimple from "connect-pg-simple";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
+import path from "path";
+import fs from "fs";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter.js";
 import { ExpressAdapter } from "@bull-board/express";
@@ -167,6 +169,31 @@ export function createApp() {
 
   // Mount API Router
   app.use("/api", apiRouter);
+
+  // Serve static files from web frontend if built (unified deployment fallback)
+  const candidatePaths = [
+    path.resolve(process.cwd(), "apps/web/dist"),
+    path.resolve(process.cwd(), "../web/dist"),
+    path.resolve(process.cwd(), "../../apps/web/dist"),
+  ];
+
+  for (const staticDir of candidatePaths) {
+    if (fs.existsSync(staticDir)) {
+      app.use(express.static(staticDir));
+      app.get("*", (req: Request, res: Response, next: NextFunction) => {
+        if (
+          req.path.startsWith("/api") ||
+          req.path.startsWith("/admin") ||
+          req.path.startsWith("/health") ||
+          req.path.startsWith("/ready")
+        ) {
+          return next();
+        }
+        res.sendFile(path.join(staticDir, "index.html"));
+      });
+      break;
+    }
+  }
 
   // Centralized Error Handler
   app.use(errorHandler);

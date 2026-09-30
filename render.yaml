@@ -1,14 +1,15 @@
 services:
   # -----------------------------------------------------------------
-  # ReachInbox API Service
+  # ReachInbox Full-Stack Web Service (API + Bull Board + Web Frontend)
   # -----------------------------------------------------------------
   - type: web
     name: reachinbox-api
     env: node
     plan: free
     region: oregon
-    buildCommand: npm install && npm run build -w packages/shared && npm run build -w apps/api
+    buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npx prisma db push --skip-generate && npm run start -w apps/api
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
@@ -29,22 +30,9 @@ services:
       - key: MAX_EMAILS_PER_HOUR_PER_SENDER
         value: 200
 
-  # -----------------------------------------------------------------
-  # ReachInbox Web Static Frontend
-  # -----------------------------------------------------------------
-  - type: web
-    name: reachinbox-web
-    env: static
-    buildCommand: npm install && npm run build -w packages/shared && npm run build -w apps/web
-    staticPublishPath: ./apps/web/dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-
 databases:
   # -----------------------------------------------------------------
-  # Managed PostgreSQL Database
+  # Managed PostgreSQL Database (Free Tier)
   # -----------------------------------------------------------------
   - name: reachinbox-db
     plan: free
