@@ -6,7 +6,14 @@ import { DashboardPage } from "./pages/DashboardPage.js";
 import { Loader2 } from "lucide-react";
 
 export const App: React.FC = () => {
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem("reachinbox_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   useEffect(() => {
@@ -14,8 +21,16 @@ export const App: React.FC = () => {
       try {
         const currentUser = await authApi.getMe();
         setUser(currentUser);
+        localStorage.setItem("reachinbox_user", JSON.stringify(currentUser));
       } catch {
-        setUser(null);
+        try {
+          const saved = localStorage.getItem("reachinbox_user");
+          if (!saved) {
+            setUser(null);
+          }
+        } catch {
+          setUser(null);
+        }
       } finally {
         setIsLoadingAuth(false);
       }
@@ -23,17 +38,27 @@ export const App: React.FC = () => {
     checkAuth();
   }, []);
 
+  const handleLoginSuccess = (u: UserProfile) => {
+    setUser(u);
+    try {
+      localStorage.setItem("reachinbox_user", JSON.stringify(u));
+    } catch {}
+  };
+
   const handleLogout = async () => {
     try {
       await authApi.logout();
     } catch {
       // ignore
     } finally {
+      try {
+        localStorage.removeItem("reachinbox_user");
+      } catch {}
       setUser(null);
     }
   };
 
-  if (isLoadingAuth) {
+  if (isLoadingAuth && !user) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -50,7 +75,7 @@ export const App: React.FC = () => {
   }
 
   if (!user) {
-    return <LoginPage onLoginSuccess={(u) => setUser(u)} />;
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
   return <DashboardPage user={user} onLogout={handleLogout} />;

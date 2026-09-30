@@ -22,6 +22,9 @@ import { errorHandler } from "./middleware/error.middleware.js";
 export function createApp() {
   const app = express();
 
+  // Trust reverse proxy (Render, Cloudflare, AWS ALB)
+  app.set("trust proxy", 1);
+
   // Security Middleware
   app.use(
     helmet({
@@ -32,11 +35,10 @@ export function createApp() {
   // CORS Middleware
   app.use(
     cors({
-      origin: [
-        env.FRONTEND_URL,
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-      ],
+      origin: (requestOrigin, callback) => {
+        // Allow all origins (localhost, onrender.com, custom domains) with credentials
+        callback(null, true);
+      },
       credentials: true,
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
       allowedHeaders: [
@@ -44,6 +46,7 @@ export function createApp() {
         "Authorization",
         "Idempotency-Key",
         "X-Requested-With",
+        "X-User-Id",
       ],
     }),
   );
@@ -59,7 +62,7 @@ export function createApp() {
   const sessionStore = new PgSession({
     conString: env.DATABASE_URL,
     tableName: "session",
-    createTableIfMissing: false,
+    createTableIfMissing: true,
   });
 
   app.use(
@@ -68,11 +71,12 @@ export function createApp() {
       secret: env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
+      proxy: true,
       cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         httpOnly: true,
         secure: env.NODE_ENV === "production",
-        sameSite: env.NODE_ENV === "production" ? "none" : "lax",
+        sameSite: "lax",
       },
     }),
   );

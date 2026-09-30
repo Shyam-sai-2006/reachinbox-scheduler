@@ -4,6 +4,9 @@ import { prisma } from "./db/prisma.js";
 import { smtpService } from "./services/smtp/smtp.service.js";
 import { elasticsearchService } from "./services/elasticsearch/elasticsearch.service.js";
 import { getRedisClient } from "./queues/redis.js";
+import { fork, ChildProcess } from "child_process";
+import path from "path";
+import fs from "fs";
 
 const app = createApp();
 const PORT = env.PORT || 4000;
@@ -46,11 +49,44 @@ async function bootstrap() {
     console.log(`🩺 Health check at http://localhost:${PORT}/health`);
   });
 
-  // 4. Graceful Shutdown (Section 84)
+  // 4. Start Background Worker in standalone child process if in unified mode
+  let workerProcess: ChildProcess | null = null;
+  if (process.env.RUN_EMBEDDED_WORKER !== "false") {
+    try {
+      const candidateWorkerPaths = [
+        path.resolve(process.cwd(), "apps/worker/dist/worker.js"),
+        path.resolve(process.cwd(), "../worker/dist/worker.js"),
+        path.resolve(__dirname, "../../worker/dist/worker.js"),
+      ];
+
+      for (const workerPath of candidateWorkerPaths) {
+        if (fs.existsSync(workerPath)) {
+          console.log(`🚀 Spawning background email worker from: ${workerPath}`);
+          workerProcess = fork(workerPath, [], {
+            stdio: "inherit",
+            env: { ...process.env },
+          });
+          workerProcess.on("error", (err) => {
+            console.warn("[EMBEDDED WORKER WARN]", err.message);
+          });
+          break;
+        }
+      }
+    } catch (err: any) {
+      console.warn("[EMBEDDED WORKER WARN]", err.message);
+    }
+  }
+
+  // 5. Graceful Shutdown (Section 84)
   const shutdown = async (signal: string) => {
     console.log(
       `\n[SHUTDOWN] Received ${signal}. Gracefully stopping API server...`,
     );
+    if (workerProcess) {
+      try {
+        workerProcess.kill("SIGTERM");
+      } catch {}
+    }
     server.close(async () => {
       try {
         await prisma.$disconnect();

@@ -28,6 +28,18 @@ export async function apiClient<T>(
     defaultHeaders["Content-Type"] = "application/json";
   }
 
+  // Attach stored user auth headers for bulletproof cross-origin / reverse-proxy session support
+  try {
+    const rawUser = localStorage.getItem("reachinbox_user");
+    if (rawUser) {
+      const parsed = JSON.parse(rawUser);
+      if (parsed?.id) {
+        defaultHeaders["X-User-Id"] = parsed.id;
+        defaultHeaders["Authorization"] = `Bearer ${parsed.id}`;
+      }
+    }
+  } catch {}
+
   const response = await fetch(url, {
     ...options,
     credentials: "include",

@@ -22,14 +22,26 @@ export async function requireAuth(
   next: NextFunction,
 ): Promise<void> {
   const sessionUser = (req.session as any)?.user;
-  const userId = sessionUser?.id || (req.session as any)?.userId;
+  let userId = sessionUser?.id || (req.session as any)?.userId;
+
+  // Header token / User-Id fallback (useful in cross-site / proxy deployments)
+  if (!userId) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      userId = authHeader.substring(7).trim();
+    }
+  }
+
+  if (!userId && req.headers["x-user-id"]) {
+    userId = (req.headers["x-user-id"] as string).trim();
+  }
 
   if (!userId) {
     res.status(401).json({
       success: false,
       error: {
         code: "UNAUTHORIZED",
-        message: "Authentication required. Please log in with Google.",
+        message: "Authentication required. Please log in or refresh your session.",
       },
     });
     return;
@@ -59,6 +71,10 @@ export async function requireAuth(
     }
 
     req.user = user;
+    if (req.session) {
+      (req.session as any).user = user;
+      (req.session as any).userId = user.id;
+    }
     next();
   } catch (err: any) {
     res.status(500).json({
