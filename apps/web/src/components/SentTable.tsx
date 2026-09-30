@@ -98,12 +98,13 @@ export const SentTable: React.FC<SentTableProps> = ({
                 <th className="py-3 px-6">Subject</th>
                 <th className="py-3 px-6">Sent Time</th>
                 <th className="py-3 px-6">Status</th>
-                <th className="py-3 px-6 text-right">Ethereal Preview</th>
+                <th className="py-3 px-6 text-right">Delivery Channel / Preview</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {emails.map((email) => {
                 const isFailed = email.status === "failed";
+                const isSent = email.status === "sent";
 
                 return (
                   <tr
@@ -161,11 +162,17 @@ export const SentTable: React.FC<SentTableProps> = ({
                           href={email.previewUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-amber-200 transition-colors"
+                          title="Captured by Ethereal test sandbox. Add real SMTP to send directly to recipient inboxes."
                         >
-                          <span>View Preview</span>
+                          <span>Ethereal Preview</span>
                           <ExternalLink className="w-3 h-3" />
                         </a>
+                      ) : isSent ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Real Inbox Delivered</span>
+                        </span>
                       ) : (
                         <span className="text-slate-400 text-[11px]">—</span>
                       )}

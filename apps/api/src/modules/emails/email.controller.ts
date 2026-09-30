@@ -54,21 +54,37 @@ export class EmailController {
 
     const { subject, body, startTime, delayMs, hourlyLimit } = validation.data;
 
-    // 2. Validate file upload
-    if (!req.file || !req.file.buffer) {
+    // 2. Extract recipient emails from direct text input or uploaded file
+    let recipientsRaw = "";
+    if (
+      validation.data.recipientEmails &&
+      typeof validation.data.recipientEmails === "string" &&
+      validation.data.recipientEmails.trim()
+    ) {
+      recipientsRaw = validation.data.recipientEmails;
+    } else if (req.file && req.file.buffer) {
+      recipientsRaw = req.file.buffer.toString("utf8");
+    } else if (
+      req.body.recipientEmails &&
+      typeof req.body.recipientEmails === "string"
+    ) {
+      recipientsRaw = req.body.recipientEmails;
+    }
+
+    if (!recipientsRaw.trim()) {
       res.status(400).json({
         success: false,
         error: {
-          code: "FILE_REQUIRED",
-          message: "A CSV or TXT file containing email addresses is required",
+          code: "RECIPIENTS_REQUIRED",
+          message:
+            "Please provide recipient email addresses by typing them or uploading a CSV/TXT file",
         },
       });
       return;
     }
 
-    // 3. Parse and extract emails from file
-    const fileContent = req.file.buffer.toString("utf8");
-    const parseResult = parseEmailsFromText(fileContent);
+    // 3. Parse and extract emails from text or file
+    const parseResult = parseEmailsFromText(recipientsRaw);
 
     if (parseResult.validEmails.length === 0) {
       res.status(400).json({
@@ -76,7 +92,7 @@ export class EmailController {
         error: {
           code: "NO_VALID_EMAILS",
           message:
-            "No valid recipient email addresses detected in the uploaded file",
+            "No valid recipient email addresses detected in the provided input or file",
         },
       });
       return;
@@ -103,8 +119,12 @@ export class EmailController {
 
     // 5. Calculate scheduled times and deterministic sender assignments
     const parsedStartTime = new Date(startTime);
+    const effectiveStartTime =
+      parsedStartTime.getTime() < Date.now()
+        ? new Date()
+        : parsedStartTime;
     const scheduleTimes = calculateScheduleTimes(
-      parsedStartTime,
+      effectiveStartTime,
       emailCount,
       delayMs,
     );

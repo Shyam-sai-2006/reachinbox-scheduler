@@ -22,6 +22,8 @@ export function normalizeEmail(email: string): string {
 
 /**
  * Parses raw text or CSV content and extracts unique, valid email addresses.
+ * Fully supports real emails with subdomains, plus-addresses, angle-brackets (e.g. John <john@mail.com>),
+ * commas, newlines, tabs, and space separators.
  */
 export function parseEmailsFromText(rawContent: string): EmailParseResult {
   if (!rawContent || !rawContent.trim()) {
@@ -34,7 +36,7 @@ export function parseEmailsFromText(rawContent: string): EmailParseResult {
     };
   }
 
-  // Split by line breaks and commas/semicolons
+  // Split by line breaks, commas, semicolons, tabs, and spaces
   const lines = rawContent.split(/\r?\n/);
   const candidateTokens: string[] = [];
 
@@ -42,13 +44,25 @@ export function parseEmailsFromText(rawContent: string): EmailParseResult {
     const trimmedLine = line.trim();
     if (!trimmedLine) continue;
 
-    // Handle CSV quoting / comma separation
-    const cells = trimmedLine
-      .split(/[,;\t]/)
-      .map((c) => c.replace(/^["']|["']$/g, "").trim());
-    for (const cell of cells) {
-      if (cell) {
-        candidateTokens.push(cell);
+    // First check if there are angle bracket emails: "John <email@domain.com>"
+    const angleMatches = trimmedLine.match(/<([^>]+)>/g);
+    if (angleMatches && angleMatches.length > 0) {
+      for (const m of angleMatches) {
+        const emailInside = m.replace(/[<>]/g, "").trim();
+        if (emailInside) {
+          candidateTokens.push(emailInside);
+        }
+      }
+      // Also continue to process other items in the line if any
+    }
+
+    // Split line by commas, semicolons, tabs, or spaces
+    const parts = trimmedLine
+      .split(/[,;\t\s]+/)
+      .map((c) => c.replace(/^[<"'(]+|[>"'),.:]+$/g, "").trim());
+    for (const part of parts) {
+      if (part && !part.startsWith("<") && !part.endsWith(">")) {
+        candidateTokens.push(part);
       }
     }
   }
@@ -60,19 +74,25 @@ export function parseEmailsFromText(rawContent: string): EmailParseResult {
   let invalidCount = 0;
 
   for (const token of candidateTokens) {
-    // If the token matches header words like 'email', 'e-mail', 'mail', 'name', ignore
-    const lower = token.toLowerCase();
+    const cleaned = token.replace(/^[<"'(]+|[>"'),.:]+$/g, "").trim();
+    if (!cleaned) continue;
+
+    const lower = cleaned.toLowerCase();
+    // Ignore header words commonly present in CSVs or paste headers
     if (
       lower === "email" ||
       lower === "e-mail" ||
       lower === "emails" ||
-      lower === "recipient"
+      lower === "recipient" ||
+      lower === "recipients" ||
+      lower === "to" ||
+      lower === "name"
     ) {
       continue;
     }
 
-    if (isValidEmail(token)) {
-      const normalized = normalizeEmail(token);
+    if (isValidEmail(cleaned)) {
+      const normalized = normalizeEmail(cleaned);
       if (seen.has(normalized)) {
         duplicateCount++;
       } else {
@@ -80,10 +100,10 @@ export function parseEmailsFromText(rawContent: string): EmailParseResult {
         validEmails.push(normalized);
       }
     } else {
-      // If it looks like someone typed an email-like attempt or invalid string
-      if (token.includes("@") || token.includes(".")) {
+      // If it looks like an attempted email address
+      if (cleaned.includes("@") || cleaned.includes(".")) {
         invalidCount++;
-        invalidItems.push(token);
+        invalidItems.push(cleaned);
       }
     }
   }

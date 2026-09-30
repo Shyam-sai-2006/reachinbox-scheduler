@@ -26,7 +26,7 @@ export class WorkerSmtpService {
    */
   private async getTransporter(
     senderId: string,
-  ): Promise<{ transporter: nodemailer.Transporter; senderEmail: string }> {
+  ): Promise<{ transporter: nodemailer.Transporter; senderEmail: string; displayName?: string | null }> {
     const sender = await prisma.emailSender.findUnique({
       where: { id: senderId },
     });
@@ -59,22 +59,36 @@ export class WorkerSmtpService {
     return {
       transporter: this.transporterCache.get(senderId)!,
       senderEmail: sender.email,
+      displayName: sender.displayName,
     };
   }
 
   /**
-   * Sends an email via Nodemailer with deterministic Message-ID and captures Ethereal preview URL
+   * Clears cached transporter (useful when sender credentials update)
+   */
+  public clearTransporterCache(senderId?: string): void {
+    if (senderId) {
+      this.transporterCache.delete(senderId);
+    } else {
+      this.transporterCache.clear();
+    }
+  }
+
+  /**
+   * Sends an email via Nodemailer with deterministic Message-ID and captures Ethereal preview URL if applicable
    */
   public async sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
-    const { transporter, senderEmail } = await this.getTransporter(
-      params.senderId,
-    );
+    const { transporter, senderEmail, displayName } =
+      await this.getTransporter(params.senderId);
 
     const deterministicMessageId = `<email-message-${params.emailMessageId}@reachinbox.local>`;
+    const fromAddress = displayName
+      ? `"${displayName}" <${senderEmail}>`
+      : senderEmail;
 
     try {
       const info = await transporter.sendMail({
-        from: senderEmail,
+        from: fromAddress,
         to: params.recipient,
         subject: params.subject,
         text: params.body,

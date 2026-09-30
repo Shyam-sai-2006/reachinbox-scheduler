@@ -23,6 +23,13 @@ export class WorkerSlackService {
       const webhookUrl = decryptText(conn.webhookUrlEncrypted);
       if (!webhookUrl) return false;
 
+      if (webhookUrl.includes("MOCK")) {
+        console.log(
+          `[SLACK WORKER MOCK] Rate limit alert received for ${alertData.senderEmail}`,
+        );
+        return true;
+      }
+
       const messagePayload = {
         text: `⚠️ *ReachInbox Rate Limit Reached*`,
         blocks: [

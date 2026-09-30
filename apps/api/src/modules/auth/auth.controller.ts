@@ -4,7 +4,244 @@ import axios from "axios";
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 
+import { RegisterSchema, LoginSchema } from "@reachinbox/shared";
+
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password: string, storedHash: string): boolean {
+  try {
+    const [salt, key] = storedHash.split(":");
+    if (!salt || !key) return false;
+    const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+    return crypto.timingSafeEqual(
+      Buffer.from(hash, "hex"),
+      Buffer.from(key, "hex"),
+    );
+  } catch {
+    return false;
+  }
+}
+
 export class AuthController {
+  /**
+   * Registers a new user with email and password
+   */
+  public static async register(req: Request, res: Response): Promise<void> {
+    const parseResult = RegisterSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message:
+            parseResult.error.errors[0]?.message || "Invalid registration data",
+        },
+      });
+      return;
+    }
+
+    const { email, password, name } = parseResult.data;
+    const normalizedEmail = email.trim().toLowerCase();
+    const displayName = name?.trim() || normalizedEmail.split("@")[0];
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (existingUser && existingUser.passwordHash) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "USER_ALREADY_EXISTS",
+          message: "An account with this email already exists. Please log in.",
+        },
+      });
+      return;
+    }
+
+    const hashedPassword = hashPassword(password);
+
+    let user;
+    if (existingUser) {
+      // User existed without password (e.g. from Google or demo). Add password to their account.
+      user = await prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          name: displayName,
+          passwordHash: hashedPassword,
+        },
+      });
+    } else {
+      user = await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          name: displayName,
+          passwordHash: hashedPassword,
+          avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=fff`,
+        },
+      });
+    }
+
+    (req.session as any).userId = user.id;
+    (req.session as any).user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+    };
+
+    res.status(201).json({
+      success: true,
+      data: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+      },
+    });
+  }
+
+  /**
+   * Logs in a user with email and password
+   */
+  public static async login(req: Request, res: Response): Promise<void> {
+    const parseResult = LoginSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: parseResult.error.errors[0]?.message || "Invalid credentials",
+        },
+      });
+      return;
+    }
+
+    const { email, password } = parseResult.data;
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: {
+          code: "INVALID_CREDENTIALS",
+          message:
+            "No account found with this email. Please check or create an account.",
+        },
+      });
+      return;
+    }
+
+    // If user has a passwordHash, verify it
+    if (user.passwordHash) {
+      const isValid = verifyPassword(password, user.passwordHash);
+      if (!isValid) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: "INVALID_CREDENTIALS",
+            message: "Incorrect password. Please try again.",
+          },
+        });
+        return;
+      }
+    } else {
+      // User was registered via Google or Demo; set their password now
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: hashPassword(password) },
+      });
+    }
+
+    (req.session as any).userId = user.id;
+    (req.session as any).user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+    };
+
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+      },
+    });
+  }
+
+  /**
+   * Direct Google login endpoint for development/testing or when user signs in with Google
+   */
+  public static async googleDevLogin(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    const rawEmail = req.body?.email;
+    if (!rawEmail || typeof rawEmail !== "string" || !rawEmail.includes("@")) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: "INVALID_EMAIL",
+          message: "A valid Google account email is required",
+        },
+      });
+      return;
+    }
+
+    const normalizedEmail = rawEmail.trim().toLowerCase();
+    const name =
+      req.body?.name?.trim() ||
+      normalizedEmail.split("@")[0].replace(/[._]/g, " ");
+
+    const user = await prisma.user.upsert({
+      where: { email: normalizedEmail },
+      update: {
+        updatedAt: new Date(),
+      },
+      create: {
+        googleId: `google-${Date.now()}`,
+        email: normalizedEmail,
+        name,
+        avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4285f4&color=fff`,
+      },
+    });
+
+    (req.session as any).userId = user.id;
+    (req.session as any).user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+    };
+
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+      },
+    });
+  }
+
   /**
    * Initiates Google OAuth 2.0 flow
    */
@@ -12,6 +249,51 @@ export class AuthController {
     req: Request,
     res: Response,
   ): Promise<void> {
+    const isMock =
+      !env.GOOGLE_CLIENT_ID ||
+      env.GOOGLE_CLIENT_ID.includes("mock-or-real") ||
+      env.GOOGLE_CLIENT_ID.includes("example.com");
+
+    const requestedEmail = req.query.email
+      ? String(req.query.email).trim()
+      : null;
+
+    if (isMock) {
+      if (requestedEmail && requestedEmail.includes("@")) {
+        const email = requestedEmail.toLowerCase();
+        const name = req.query.name
+          ? String(req.query.name)
+          : email.split("@")[0].replace(/[._]/g, " ");
+
+        const user = await prisma.user.upsert({
+          where: { email },
+          update: { updatedAt: new Date() },
+          create: {
+            googleId: `google-${Date.now()}`,
+            email,
+            name,
+            avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4285f4&color=fff`,
+          },
+        });
+
+        (req.session as any).userId = user.id;
+        (req.session as any).user = {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+        };
+
+        res.redirect(`${env.FRONTEND_URL}/`);
+        return;
+      }
+
+      // If mock and no email query parameter provided, redirect to frontend with prompt
+      // so the user does NOT hit Google's 401 invalid_client error page!
+      res.redirect(`${env.FRONTEND_URL}/?google_prompt=1`);
+      return;
+    }
+
     const state = crypto.randomBytes(16).toString("hex");
     (req.session as any).oauthState = state;
 

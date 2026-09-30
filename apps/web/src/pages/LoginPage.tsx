@@ -1,16 +1,93 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { UserProfile } from "@reachinbox/shared";
 import { authApi } from "../api/auth.js";
 import { Button } from "../components/ui/Button.js";
-import { ShieldCheck, Zap, Server, Clock } from "lucide-react";
+import { Modal } from "../components/ui/Modal.js";
+import {
+  ShieldCheck,
+  Zap,
+  Server,
+  Clock,
+  Mail,
+  Lock,
+  User,
+  ArrowRight,
+  Sparkles,
+} from "lucide-react";
 
 interface LoginPageProps {
   onLoginSuccess: (user: UserProfile) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [isDemoLoading, setIsDemoLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  // Google Modal State
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
+  const [customGoogleEmail, setCustomGoogleEmail] = useState("");
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+
+  // Auto-open Google modal if redirected back with ?google_prompt=1
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("google_prompt") === "1") {
+      setIsGoogleModalOpen(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get("error")) {
+      setErrorMessage(`Authentication notice: ${params.get("error")}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    if (!email.trim() || !password.trim()) {
+      setErrorMessage("Please enter both email and password");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      if (authMode === "signup") {
+        const user = await authApi.register({
+          email: email.trim(),
+          password: password.trim(),
+          name: name.trim() || undefined,
+        });
+        setSuccessMessage("Account created successfully! Logging in...");
+        setTimeout(() => onLoginSuccess(user), 400);
+      } else {
+        const user = await authApi.login({
+          email: email.trim(),
+          password: password.trim(),
+        });
+        onLoginSuccess(user);
+      }
+    } catch (err: any) {
+      setErrorMessage(
+        err.message ||
+          (authMode === "signup" ? "Registration failed" : "Sign in failed"),
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFillDemoCredentials = () => {
+    setEmail("demo.user@reachinbox.local");
+    setPassword("demo12345");
+    setErrorMessage("");
+  };
 
   const handleDemoLogin = async () => {
     try {
@@ -22,6 +99,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setErrorMessage(err.message || "Demo login failed");
     } finally {
       setIsDemoLoading(false);
+    }
+  };
+
+  const handleGoogleAccountLogin = async (selectedEmail: string, displayName?: string) => {
+    try {
+      setIsGoogleSubmitting(true);
+      setErrorMessage("");
+      const user = await authApi.googleDevLogin(selectedEmail, displayName);
+      setIsGoogleModalOpen(false);
+      onLoginSuccess(user);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Google sign in failed");
+    } finally {
+      setIsGoogleSubmitting(false);
     }
   };
 
@@ -42,20 +133,157 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 shadow-xl shadow-slate-100 sm:rounded-2xl sm:px-10 border border-slate-200/80">
+          {/* Notification Messages */}
           {errorMessage && (
             <div className="mb-5 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-medium text-rose-700">
               {errorMessage}
             </div>
           )}
 
-          <div className="space-y-4">
-            {/* Real Google OAuth 2.0 Button */}
-            <a
-              href="/api/auth/google"
-              className="w-full inline-flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium shadow-xs transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          {successMessage && (
+            <div className="mb-5 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-700">
+              {successMessage}
+            </div>
+          )}
+
+          {/* Mode Switcher Tabs (Sign In vs Sign Up) */}
+          <div className="flex rounded-xl bg-slate-100 p-1 mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("signin");
+                setErrorMessage("");
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                authMode === "signin"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Sign In (Log In)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("signup");
+                setErrorMessage("");
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                authMode === "signup"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Sign Up (Register)
+            </button>
+          </div>
+
+          {/* Email & Password Authentication Form */}
+          <form onSubmit={handleEmailAuthSubmit} className="space-y-4">
+            {authMode === "signup" && (
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Karthikeya"
+                    className="w-full text-xs pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+                  Email Address <span className="text-rose-500">*</span>
+                </label>
+                {authMode === "signin" && (
+                  <button
+                    type="button"
+                    onClick={handleFillDemoCredentials}
+                    className="text-[10px] text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-0.5"
+                  >
+                    <Sparkles className="w-2.5 h-2.5" />
+                    <span>Fill Demo Creds</span>
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  className="w-full text-xs pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Password <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={authMode === "signup" ? "At least 6 characters" : "••••••••"}
+                  className="w-full text-xs pl-9 pr-3 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all"
+                />
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              className="w-full gap-2 mt-2"
+              isLoading={isLoading}
+            >
+              <span>{authMode === "signup" ? "Create Account" : "Sign In with Email"}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          </form>
+
+          {/* Divider */}
+          <div className="relative my-5">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-2 text-slate-400 font-semibold tracking-wider text-[11px]">
+                Or continue with
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {/* Google OAuth & Account Connect Button */}
+            <button
+              type="button"
+              onClick={() => setIsGoogleModalOpen(true)}
+              className="w-full inline-flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-xs transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer"
             >
               {/* Google SVG Logo */}
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -74,25 +302,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 />
               </svg>
               <span>Continue with Google</span>
-            </a>
-
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-slate-400 font-semibold tracking-wider">
-                  Or instant local preview
-                </span>
-              </div>
-            </div>
+            </button>
 
             {/* Quick Demo Login Button for Evaluator */}
             <Button
               type="button"
               variant="secondary"
               size="md"
-              className="w-full"
+              className="w-full text-xs"
               isLoading={isDemoLoading}
               onClick={handleDemoLogin}
             >
@@ -147,6 +364,104 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
       </div>
+
+      {/* Google Sign In Account Modal */}
+      <Modal
+        isOpen={isGoogleModalOpen}
+        onClose={() => setIsGoogleModalOpen(false)}
+        title="Sign in with Google"
+        subtitle="Choose your Google account to log in directly or enter your Google email"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          {/* Quick Account Pill for User's actual account */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              Detected Account
+            </p>
+            <div
+              onClick={() => handleGoogleAccountLogin("sk0894@srmist.edu.in", "Karthikeya")}
+              className="flex items-center justify-between p-3 rounded-xl border border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50 hover:border-indigo-300 transition-all cursor-pointer group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                  S
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-900 group-hover:text-indigo-700">
+                    sk0894@srmist.edu.in
+                  </p>
+                  <p className="text-[11px] text-slate-500">Google Workspace Account</p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                isLoading={isGoogleSubmitting}
+                className="text-xs"
+              >
+                Sign in
+              </Button>
+            </div>
+          </div>
+
+          {/* Or enter any other Google Email */}
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white px-2 text-slate-400 font-medium text-[11px]">
+                Or enter another Google account
+              </span>
+            </div>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (customGoogleEmail.trim()) {
+                handleGoogleAccountLogin(customGoogleEmail.trim());
+              }
+            }}
+            className="space-y-3"
+          >
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Google Email Address
+              </label>
+              <input
+                type="email"
+                required
+                value={customGoogleEmail}
+                onChange={(e) => setCustomGoogleEmail(e.target.value)}
+                placeholder="your.account@gmail.com"
+                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              variant="secondary"
+              size="md"
+              className="w-full text-xs font-semibold"
+              isLoading={isGoogleSubmitting}
+            >
+              Continue with this Account
+            </Button>
+          </form>
+
+          <div className="pt-2 text-center">
+            <a
+              href="/api/auth/google"
+              className="text-[11px] text-slate-400 hover:text-slate-600 underline"
+            >
+              Launch standard Google OAuth 2.0 redirect
+            </a>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

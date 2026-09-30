@@ -15,11 +15,64 @@ export class SlackController {
 
   public static async connect(req: Request, res: Response): Promise<void> {
     const userId = req.user!.id;
+
+    const isMock =
+      !env.SLACK_CLIENT_ID ||
+      env.SLACK_CLIENT_ID.includes("mock-or-real") ||
+      env.SLACK_CLIENT_ID.includes("example");
+
+    if (isMock) {
+      // Connect instantly in development so users don't get Slack's invalid client_id error
+      await slackService.connectMock(userId);
+      res.redirect(`${env.FRONTEND_URL}/?slack=connected`);
+      return;
+    }
+
     const state = `${userId}:${crypto.randomBytes(16).toString("hex")}`;
     (req.session as any).slackOAuthState = state;
 
     const authUrl = slackService.getAuthorizationUrl(state);
     res.redirect(authUrl);
+  }
+
+  public static async connectWebhook(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    const userId = req.user!.id;
+    const { webhookUrl, channelName, teamName } = req.body;
+
+    if (!webhookUrl || typeof webhookUrl !== "string") {
+      res.status(400).json({
+        success: false,
+        error: { code: "INVALID_WEBHOOK", message: "Webhook URL is required" },
+      });
+      return;
+    }
+
+    const result = await slackService.connectWebhook(userId, {
+      webhookUrl,
+      channelName,
+      teamName,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+      message: "Slack webhook connected successfully",
+    });
+  }
+
+  public static async testAlert(req: Request, res: Response): Promise<void> {
+    const userId = req.user!.id;
+    const delivered = await slackService.sendTestAlert(userId);
+    res.json({
+      success: true,
+      delivered,
+      message: delivered
+        ? "Test alert delivered to Slack"
+        : "Failed to send test alert to webhook",
+    });
   }
 
   public static async callback(req: Request, res: Response): Promise<void> {

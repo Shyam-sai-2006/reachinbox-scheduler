@@ -133,11 +133,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     [sentPage],
   );
 
-  // Initial load
+  // Initial load & URL params check
   useEffect(() => {
     fetchSlackStatus();
     fetchScheduled(1, true);
     fetchSent(1, true);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("slack") === "connected") {
+      addToast(
+        "success",
+        "Slack workspace connected successfully! Rate limit alerts are active.",
+      );
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (urlParams.get("slack_error")) {
+      addToast(
+        "error",
+        `Slack connection failed: ${urlParams.get("slack_error")}`,
+      );
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, [fetchSlackStatus, fetchScheduled, fetchSent]);
 
   // Keyboard shortcut '/' opens Elasticsearch search
@@ -158,11 +173,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   // Live polling for dashboard state (every 3 seconds) (Requirement 91)
   useEffect(() => {
     const interval = setInterval(() => {
-      if (activeTab === "scheduled") {
-        fetchScheduled(scheduledPage, false);
-      } else {
-        fetchSent(sentPage, false);
-      }
+      fetchScheduled(activeTab === "scheduled" ? scheduledPage : 1, false);
+      fetchSent(activeTab === "sent" ? sentPage : 1, false);
     }, 3000);
     return () => clearInterval(interval);
   }, [activeTab, scheduledPage, sentPage, fetchScheduled, fetchSent]);
@@ -186,6 +198,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         slackStatus={slackStatus}
         onLogout={onLogout}
         onRefreshSlack={fetchSlackStatus}
+        onToast={addToast}
       />
 
       {/* Main Content Area */}
@@ -289,6 +302,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         onScheduledSuccess={(msg) => {
           addToast("success", msg);
           fetchScheduled(1, true);
+          fetchSent(1, true);
         }}
         onError={(msg) => addToast("error", msg)}
       />

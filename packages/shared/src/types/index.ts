@@ -18,6 +18,8 @@ export interface EmailSenderInfo {
   port: number;
   secure: boolean;
   active: boolean;
+  isRealSmtp: boolean;
+  createdAt: string;
 }
 
 export interface CampaignInfo {

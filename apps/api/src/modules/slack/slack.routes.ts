@@ -6,5 +6,8 @@ export const slackRouter = Router();
 
 slackRouter.get("/status", requireAuth, SlackController.getStatus);
 slackRouter.get("/connect", requireAuth, SlackController.connect);
+slackRouter.post("/webhook", requireAuth, SlackController.connectWebhook);
+slackRouter.post("/test-alert", requireAuth, SlackController.testAlert);
 slackRouter.get("/callback", SlackController.callback);
 slackRouter.delete("/", requireAuth, SlackController.disconnect);
+

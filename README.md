@@ -266,15 +266,23 @@ The services will become available at:
 3. Paste the Webhook URL into `.env` under `SLACK_WEBHOOK_URL` or use the **"Connect Slack Webhook"** button in the Web header.
 4. When a sender reaches `MAX_EMAILS_PER_HOUR_PER_SENDER`, an alert with sender details, current hourly count, and next allowed reset time is automatically posted to Slack.
 
-### Ethereal SMTP Email Accounts
-This platform uses real Ethereal SMTP accounts (`smtp.ethereal.email:587`).
-- Ethereal accounts are generated via `nodemailer.createTestAccount()`.
-- The database seed (`npm run db:seed`) automatically provisions two active Ethereal senders.
-- Every email sent produces a real web preview link:
-  ```
-  https://ethereal.email/message/aruuFQcJu4JvKl7haru...
-  ```
-- Clicking the link in the **Sent Emails** table opens the live rendered HTML email in your browser!
+### Real Mail (SMTP) Delivery Engine & Inbox Routing
+In addition to the safe Ethereal sandbox, ReachInbox includes a production-grade **Real Mail (SMTP) Delivery Engine** that sends scheduled emails directly across the public internet to real recipient inboxes (Gmail, Outlook, university mailboxes, corporate domains):
+
+- **Header Management**: Click the **`Real Mail (SMTP)`** button in the dashboard navigation bar.
+- **Pre-configured 1-Click Presets**:
+  - **Gmail**: Step-by-step setup using Google 16-character App Passwords (`smtp.gmail.com:465` SSL / `587` TLS).
+  - **Brevo (Sendinblue)**: Instant setup for 300 free real emails/day (`smtp-relay.brevo.com:587`).
+  - **Outlook / Office 365**: Direct enterprise setup (`smtp.office365.com:587`).
+  - **Custom SMTP**: Any outbound host, port, credentials, and TLS/SSL configuration.
+- **Live Connection Handshake**: Click **"Test Connection"** to verify SMTP connectivity and credentials before saving.
+- **1-Click Live Test Email**: Send an instant test message to any destination address (e.g. your personal or university inbox) to confirm delivery within seconds.
+- **Dynamic Prioritization**: When any real SMTP sender is toggled **Active**, the scheduler automatically prioritizes real mail delivery over the test sandbox, and the dashboard tags sent emails with a green **"Real Inbox Delivered"** status badge.
+
+### Ethereal SMTP Email Sandbox (Default Fallback)
+For offline local development and automated testing without configuring real mail credentials, the platform also ships with Ethereal SMTP (`smtp.ethereal.email:587`):
+- Initialized automatically via `npm run db:seed`.
+- Outbound messages generate a web preview link (`https://ethereal.email/message/...`) displayed in the Sent Emails table for inspection without sending actual messages over the internet.
 
 ---
 

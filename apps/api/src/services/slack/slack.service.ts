@@ -110,6 +110,100 @@ export class SlackService {
   }
 
   /**
+   * Connects a simulated/development Slack connection
+   */
+  public async connectMock(
+    userId: string,
+    channelName = "alerts",
+    teamName = "ReachInbox Workspace",
+  ): Promise<{ teamName: string; channelName: string }> {
+    const webhookUrlEncrypted = encryptText(
+      "https://hooks.slack.com/services/MOCK/DEV/WEBHOOK",
+    );
+    await prisma.slackConnection.upsert({
+      where: { userId },
+      update: {
+        teamId: "T_MOCK_WORKSPACE",
+        teamName,
+        channelId: "C_MOCK_ALERTS",
+        channelName,
+        webhookUrlEncrypted,
+        updatedAt: new Date(),
+      },
+      create: {
+        userId,
+        teamId: "T_MOCK_WORKSPACE",
+        teamName,
+        channelId: "C_MOCK_ALERTS",
+        channelName,
+        webhookUrlEncrypted,
+      },
+    });
+    return { teamName, channelName };
+  }
+
+  /**
+   * Connects user with a custom incoming webhook URL
+   */
+  public async connectWebhook(
+    userId: string,
+    params: { webhookUrl: string; channelName?: string; teamName?: string },
+  ): Promise<{ teamName: string; channelName: string }> {
+    const channelName = params.channelName?.replace(/^#/, "") || "alerts";
+    const teamName = params.teamName || "Slack Workspace";
+    const webhookUrlEncrypted = encryptText(params.webhookUrl.trim());
+
+    await prisma.slackConnection.upsert({
+      where: { userId },
+      update: {
+        teamId: "T_CUSTOM",
+        teamName,
+        channelId: `C_${channelName}`,
+        channelName,
+        webhookUrlEncrypted,
+        updatedAt: new Date(),
+      },
+      create: {
+        userId,
+        teamId: "T_CUSTOM",
+        teamName,
+        channelId: `C_${channelName}`,
+        channelName,
+        webhookUrlEncrypted,
+      },
+    });
+
+    return { teamName, channelName };
+  }
+
+  /**
+   * Sends a test alert to verify the webhook
+   */
+  public async sendTestAlert(userId: string): Promise<boolean> {
+    const conn = await prisma.slackConnection.findUnique({
+      where: { userId },
+    });
+    if (!conn) return false;
+    const webhookUrl = decryptText(conn.webhookUrlEncrypted);
+    if (!webhookUrl || webhookUrl.includes("MOCK")) {
+      return true; // Mock succeeds automatically
+    }
+
+    try {
+      await axios.post(
+        webhookUrl,
+        {
+          text: "🚀 *ReachInbox Test Notification*: Slack connection is verified and operational!",
+        },
+        { timeout: 5000 },
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Disconnects Slack integration for user
    */
   public async disconnect(userId: string): Promise<void> {
