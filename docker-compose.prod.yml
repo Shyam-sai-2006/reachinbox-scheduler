@@ -1,0 +1,161 @@
+version: '3.8'
+
+services:
+  # -----------------------------------------------------------------
+  # PostgreSQL 16 Database
+  # -----------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: reachinbox_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reachinbox_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-reachinbox}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-reachinbox}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - reachinbox_network
+
+  # -----------------------------------------------------------------
+  # Redis 7 (BullMQ Queue & Sliding-Window Rate Limiter)
+  # -----------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: reachinbox_redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - reachinbox_network
+
+  # -----------------------------------------------------------------
+  # Elasticsearch 8.13.0 (Full-Text Search Engine)
+  # -----------------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: reachinbox_elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - reachinbox_network
+
+  # -----------------------------------------------------------------
+  # ReachInbox API Service (Express + Bull Board)
+  # -----------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: reachinbox_api
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-reachinbox_secure_pass}@postgres:5432/${POSTGRES_DB:-reachinbox}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      ELASTICSEARCH_NODE: "http://elasticsearch:9200"
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost}"
+      SESSION_SECRET: "${SESSION_SECRET:-reachinbox-production-session-secret-key-32chars}"
+      APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      GOOGLE_CALLBACK_URL: "${GOOGLE_CALLBACK_URL:-http://localhost/api/auth/google/callback}"
+      SLACK_CLIENT_ID: "${SLACK_CLIENT_ID:-}"
+      SLACK_CLIENT_SECRET: "${SLACK_CLIENT_SECRET:-}"
+      SLACK_REDIRECT_URI: "${SLACK_REDIRECT_URI:-http://localhost/api/slack/callback}"
+      SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL:-}"
+      BULL_BOARD_USER: "${BULL_BOARD_USER:-admin}"
+      BULL_BOARD_PASSWORD: "${BULL_BOARD_PASSWORD:-admin_secure_password}"
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-10}
+      MIN_SEND_DELAY_MS: ${MIN_SEND_DELAY_MS:-2000}
+      MAX_EMAILS_PER_HOUR_PER_SENDER: ${MAX_EMAILS_PER_HOUR_PER_SENDER:-200}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - reachinbox_network
+
+  # -----------------------------------------------------------------
+  # ReachInbox Worker Service (BullMQ Processor)
+  # -----------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    container_name: reachinbox_worker
+    restart: always
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-reachinbox_secure_pass}@postgres:5432/${POSTGRES_DB:-reachinbox}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      ELASTICSEARCH_NODE: "http://elasticsearch:9200"
+      APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-10}
+      MIN_SEND_DELAY_MS: ${MIN_SEND_DELAY_MS:-2000}
+      MAX_EMAILS_PER_HOUR_PER_SENDER: ${MAX_EMAILS_PER_HOUR_PER_SENDER:-200}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - reachinbox_network
+
+  # -----------------------------------------------------------------
+  # ReachInbox Web Frontend (Nginx SPA + Reverse Proxy)
+  # -----------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: reachinbox_web
+    restart: always
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - reachinbox_network
+
+networks:
+  reachinbox_network:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  esdata:
+    driver: local

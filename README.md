@@ -32,6 +32,7 @@ A production-grade, distributed email scheduling platform built for ReachInbox /
 12. [Automated Verification & Test Suite](#12-automated-verification--test-suite)
 13. [5-Minute Interactive Demo Script](#13-5-minute-interactive-demo-script)
 14. [Assignment Requirements Traceability Matrix](#14-assignment-requirements-traceability-matrix)
+15. [Production Deployment Guide (Docker & VPS)](#15-production-deployment-guide-docker--vps)
 
 ---
 
@@ -443,6 +444,84 @@ Follow this script to demonstrate and verify every key capability of the platfor
 | **REQ-71 to 75** | Google & Slack OAuth 2.0 Integrations | `apps/api/src/modules/auth/`<br>`apps/api/src/modules/slack/` | Live OAuth routes & local dev fallback |
 | **REQ-76 to 80** | React + Vite Frontend (Tables, Modals, Badges) | `apps/web/src/pages/DashboardPage.tsx`<br>`apps/web/src/components/ComposeModal.tsx` | Production Vite build succeeds |
 | **REQ-81** | Unified Automated Verification Script | `scripts/verify.mjs` | `npm run verify` passes with code 0 |
+
+---
+
+## 15. Production Deployment Guide (Docker & VPS)
+
+This project is packaged with a full production multi-container Docker stack:
+- **`postgres`**: PostgreSQL 16 Alpine with persistent data volume.
+- **`redis`**: Redis 7 Alpine with persistent AOF storage.
+- **`elasticsearch`**: Elasticsearch 8.13.0 with persistent search index.
+- **`api`**: Node.js 20 production container with automated schema migrations.
+- **`worker`**: Node.js 20 BullMQ distributed queue processor.
+- **`web`**: Nginx Alpine container serving the optimized React SPA with Gzip compression and reverse proxying `/api/` and `/admin/` to the API service.
+
+---
+
+### Method A: Automated 1-Command VPS Deployment
+
+On any Linux server or Cloud VPS (AWS EC2, DigitalOcean Droplet, Hetzner, Linode, GCP Compute Engine):
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Shyam-sai-2006/reachinbox-scheduler.git
+   cd reachinbox-scheduler
+   ```
+
+2. **Make the deployment script executable and run it**:
+   ```bash
+   chmod +x deploy.sh
+   ./deploy.sh
+   ```
+
+3. **Access your platform**:
+   - 🌐 **Web Dashboard**: `http://<your-server-ip>`
+   - 📊 **Bull Board Queue Monitor**: `http://<your-server-ip>/admin/queues`
+   - 🩺 **API Health Check**: `http://<your-server-ip>/api/health`
+
+---
+
+### Method B: Manual Docker Compose Deployment
+
+1. **Create your production environment file**:
+   ```bash
+   cp .env.production.example .env.production
+   ```
+   *(Edit `.env.production` to set your custom passwords, encryption keys, and domain).*
+
+2. **Set Elasticsearch virtual memory limit** (standard Linux requirement):
+   ```bash
+   sudo sysctl -w vm.max_map_count=262144
+   ```
+
+3. **Build and launch all 6 production containers**:
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+   ```
+
+4. **Verify container health**:
+   ```bash
+   docker compose -f docker-compose.prod.yml ps
+   ```
+
+---
+
+### Useful Production Management Commands
+
+| Operation | Command |
+| :--- | :--- |
+| **View live logs** | `docker compose -f docker-compose.prod.yml logs -f` |
+| **View worker logs only** | `docker compose -f docker-compose.prod.yml logs -f worker` |
+| **Restart services** | `docker compose -f docker-compose.prod.yml restart` |
+| **Stop platform** | `docker compose -f docker-compose.prod.yml down` |
+| **Re-index Elasticsearch** | `docker compose -f docker-compose.prod.yml exec worker npm run reindex` |
+| **Seed test senders** | `docker compose -f docker-compose.prod.yml exec api npm run db:seed` |
+
+---
+
+### Free SSL / HTTPS Setup (Optional)
+If you point a custom domain (e.g. `reachinbox.yourdomain.com`) to your server IP, you can obtain a free SSL certificate with Let's Encrypt / Certbot or enable Cloudflare's free Flexible/Full SSL proxy in front of your server with zero extra configuration.
 
 ---
 
