@@ -9,7 +9,14 @@ const EnvSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
-  PORT: z.coerce.number().default(3001),
+  PORT: z.coerce
+    .number()
+    .default(3001)
+    .transform((val) => {
+      if (process.env.WORKER_PORT) return Number(process.env.WORKER_PORT);
+      if (process.env.NODE_ENV !== "production" && val === 4000) return 3001;
+      return val;
+    }),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   REDIS_URL: z.string().default("redis://127.0.0.1:6379"),
   ELASTICSEARCH_NODE: z.string().default("http://127.0.0.1:9200"),

@@ -49,9 +49,12 @@ async function bootstrap() {
     console.log(`🩺 Health check at http://localhost:${PORT}/health`);
   });
 
-  // 4. Start Background Worker in standalone child process if in unified mode
+  // 4. Start Background Worker in standalone child process if in unified production mode (e.g. Render)
   let workerProcess: ChildProcess | null = null;
-  if (process.env.RUN_EMBEDDED_WORKER !== "false") {
+  if (
+    process.env.RUN_EMBEDDED_WORKER === "true" ||
+    (process.env.RUN_EMBEDDED_WORKER !== "false" && env.NODE_ENV === "production")
+  ) {
     try {
       const candidateWorkerPaths = [
         path.resolve(process.cwd(), "apps/worker/dist/worker.js"),
