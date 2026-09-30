@@ -445,7 +445,7 @@ export class AuthController {
    * Logs out current user and destroys session
    */
   public static async logout(req: Request, res: Response): Promise<void> {
-    req.session.destroy((err) => {
+    req.session.destroy((err: any) => {
       if (err) {
         console.error("[AUTH ERROR] Failed to destroy session:", err);
         res.status(500).json({

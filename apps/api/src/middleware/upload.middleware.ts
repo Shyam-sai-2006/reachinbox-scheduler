@@ -16,7 +16,7 @@ export const uploadEmailFile = multer({
   limits: {
     fileSize: env.MAX_UPLOAD_MB * 1024 * 1024,
   },
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req: any, file: any, cb: any) => {
     // Allow if mime type matches or file extension is .csv / .txt
     const isCsvOrTxt =
       file.originalname.toLowerCase().endsWith(".csv") ||
